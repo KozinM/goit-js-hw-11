@@ -1,101 +1,134 @@
-// styles import
-import './css/styles.css';
-
-//importing fetchContriesList
-import { fetchCountries} from './fetchCountries';
-
-//importing notification library
+/*library connection*/
 import Notiflix from 'notiflix';
+import SimpleLightbox from "simplelightbox";
+import "simplelightbox/dist/simple-lightbox.min.css";
 
-//importing debounce function from lodash library
-import debounce from 'lodash.debounce';
+/*importing own functions*/
+import './css/styles.css';
+import { createGallery } from './js/createGallery';
+import { cleanGallery } from './js/createGallery';
+import { getImages } from './js/getImages';
 
-//creating and initializing variable for debounce 
-const DELAY = 300;
+/*variables */
+let simplelightbox;
 
-//creating and initializing object with links on page elements (input box, country list, country info)
+let currentSearch = {
+  page: 1,
+  phrase: '',
+  totalHits: 0,
+  resultsPerPage: 40,
+};
+
 const refs = {
-    "countryInput": document.querySelector("#search-box"),
-    "countryList": document.querySelector(".country-list"),
-    "countryInfo": document.querySelector(".country-info")
+  gallery: document.querySelector('.gallery'),
+  btnSearch: document.querySelector('#search-form'),
+  btnLoadMore: document.querySelector('.load-more'),
+};
+
+//adding event listiner on search button
+refs.btnSearch.addEventListener('submit', clickOnBtnSearchHandler);
+
+//adding event listiner on loadMore button
+refs.btnLoadMore.addEventListener('click', clickOnBtnLoadMoreHandler);
+
+/* adding event listiner for handling clicks on gallery elements*/
+refs.gallery.addEventListener('click', clickOnGalleryElementHandler);
+
+/* defining clickOnGalleryElementHandler*/
+function clickOnGalleryElementHandler(event) {
+
+    event.preventDefault();
+
+    simplelightbox = new SimpleLightbox ('.gallery a', {
+      nav: true,
+      close: true,
+      caption: true,
+      captionsData: 'alt',
+      captionPosition: 'bottom',
+      captionDelay: 250,
+    });
 }
 
-//setting up event listiner for input
-refs.countryInput.addEventListener('input', debounce(onCountryInputHandler, DELAY));
 
-//defining handler for input
-function onCountryInputHandler() {
-    //console.log("I'm here");
-  const name = refs.countryInput.value.trim();
-  if (name === '') {
-    return (refs.countryList.innerHTML = ''), (refs.countryInfo.innerHTML = '');
+/*UNUSED defining function for getting images with gallery creation*/ 
+async function getImgLinks(img, page, perPage) {
+  const { data } = await getImages(img, page, perPage);
+  createGallery(data.hits, refs.gallery);
+}
+
+/*defining function for getting images without gallery creation*/ 
+async function getImgWithOutGalleryCreation(searchString, page, perPage) {
+  const { data } = await getImages(searchString, page, perPage);
+  currentSearch.totalHits = data.totalHits;
+  return data.hits;
+}
+
+/*defining clickOnBtnSearchHandler function*/
+
+function clickOnBtnSearchHandler(event) {
+  event.preventDefault();
+  cleanGallery(refs.gallery);
+  refs.btnLoadMore.classList.add('js-is-hidden');
+  currentSearch.page = 1;
+
+  currentSearch.phrase = event.currentTarget.searchQuery.value.trim();
+  console.log(currentSearch.phrase);
+
+  if (currentSearch.phrase === '') {
+    return warningEmptySearch();
   }
 
-  fetchCountries(name)
-    .then(countriesList => {
-      refs.countryList.innerHTML = '';
-      refs.countryInfo.innerHTML = '';
-    
-      if (countriesList.length === 1) {
-        
-        updateCountriesList(countriesList, refs.countryList);
-        updateCountriesInfo(countriesList, refs.countryInfo);
-
-      } else if (countriesList.length >= 10) {
-
-        warningTooMany();
-
-      } else {
-
-        updateCountriesList(countriesList, refs.countryList);
+  refs.btnLoadMore.classList.remove('js-is-hidden');
+  getImgWithOutGalleryCreation(
+    currentSearch.phrase,
+    currentSearch.page,
+    currentSearch.resultsPerPage
+  )
+    .then(data => {
+      createGallery(data, refs.gallery);
+    })
+    .then(() => {
+      if (currentSearch.totalHits === 0) {
+        refs.btnLoadMore.classList.add('js-is-hidden');
+        return warningNoResults();
       }
     })
-    .catch(warningNoCountry);
+    .catch(error => console.log(error));
 }
 
-
-//defining function for updating countries list
-function updateCountriesList(countriesList, htmlElement) {
-  const element = countriesList
-    .map(({ name, flags }) => {
-      return `
-            <li class="country-list__item" style="list-style-type: none; display: flex; align-items:center">
-                <img style = "display: inline-block" class="country-list__flag" src="${flags.svg}" alt="The flag of ${name.official}" width = 100 height = 100px>
-                <h2 class="country-list__name">${name.official}</h2>
-            </li>
-            `;
+/*defining clickOnBtnLoadMoreHandler function*/
+function clickOnBtnLoadMoreHandler(event) {
+  if (currentSearch.totalHits > currentSearch.page * 40) {
+    currentSearch.page += 1;
+    console.log(currentSearch.phrase);
+    getImgWithOutGalleryCreation(
+      currentSearch.phrase,
+      currentSearch.page,
+      currentSearch.resultsPerPage
+    ).then(data => {
+      createGallery(data, refs.gallery);
+      simplelightbox.refresh();
     })
-    .join('');
-
-    htmlElement.insertAdjacentHTML('beforeend', element);
+    .catch(error => console.log(error));
+  } else {
+    refs.btnLoadMore.classList.add('js-is-hidden');
+    return warningNoMoreResults();
+  }
 }
 
-//defining function for updating country's info
-function updateCountriesInfo(countriesList, htmlElement) {
-  const element = countriesList
-    .map(({ capital, population, languages }) => {
-      return `
-          <ul class="country-info__list" style="list-style-type: none">
-              <li class="country-info__capital"><p>Сapital: ${capital}</p></li>
-              <li class="country-info__population"><p>Population: ${population}</p></li>
-              <li class="country-info__languages"><p>Languages: ${Object.values(languages).join(
-                '; ',
-              )}</p></li>
-          </ul>
-          `;
-    })
-    .join('');
-
-  htmlElement.insertAdjacentHTML('beforeend', element);
+/*notification functions*/
+function warningEmptySearch() {
+  Notiflix.Notify.failure('Please enter a word or phrase for searchig!');
 }
 
-//defining function for notification if unable to find a country
-function warningNoCountry() {
-  Notiflix.Notify.failure('Sorry, there is no country with such name');
+function warningNoResults() {
+  Notiflix.Notify.failure(
+    'Sorry, there are no images matching your search query. Please try again.'
+  );
 }
 
-//defining function for notification if search result exeedes a limit
-function warningTooMany() {
-  Notiflix.Notify.info('Too many matches found. Please enter a more specific name.');
-}
-
+function warningNoMoreResults() {
+  Notiflix.Notify.failure(
+    "We're sorry, but you've reached the end of search results."
+  );
+  }
