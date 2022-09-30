@@ -10,15 +10,27 @@ import { cleanGallery } from './js/createGallery';
 import { getImages } from './js/getImages';
 
 /*variables */
-let simplelightbox;
 
+/*creating instanse of simplelightbox instance*/
+let simplelightbox = new SimpleLightbox ('.gallery a', {
+  nav: true,
+  close: true,
+  caption: true,
+  captionsData: 'alt',
+  captionPosition: 'bottom',
+  captionDelay: 250,
+});;
+
+/*for search reasons*/
 let currentSearch = {
   page: 1,
   phrase: '',
   totalHits: 0,
   resultsPerPage: 40,
+  nowDisplayed: 0
 };
 
+/*document elements*/
 const refs = {
   gallery: document.querySelector('.gallery'),
   btnSearch: document.querySelector('#search-form'),
@@ -31,35 +43,11 @@ refs.btnSearch.addEventListener('submit', clickOnBtnSearchHandler);
 //adding event listiner on loadMore button
 refs.btnLoadMore.addEventListener('click', clickOnBtnLoadMoreHandler);
 
-/* adding event listiner for handling clicks on gallery elements*/
-refs.gallery.addEventListener('click', clickOnGalleryElementHandler);
-
-/* defining clickOnGalleryElementHandler*/
-function clickOnGalleryElementHandler(event) {
-
-    event.preventDefault();
-
-    simplelightbox = new SimpleLightbox ('.gallery a', {
-      nav: true,
-      close: true,
-      caption: true,
-      captionsData: 'alt',
-      captionPosition: 'bottom',
-      captionDelay: 250,
-    });
-}
-
-
-/*UNUSED defining function for getting images with gallery creation*/ 
-async function getImgLinks(img, page, perPage) {
-  const { data } = await getImages(img, page, perPage);
-  createGallery(data.hits, refs.gallery);
-}
-
 /*defining function for getting images without gallery creation*/ 
 async function getImgWithOutGalleryCreation(searchString, page, perPage) {
   const { data } = await getImages(searchString, page, perPage);
   currentSearch.totalHits = data.totalHits;
+  currentSearch.nowDisplayed = page*perPage;
   return data.hits;
 }
 
@@ -70,15 +58,16 @@ function clickOnBtnSearchHandler(event) {
   cleanGallery(refs.gallery);
   refs.btnLoadMore.classList.add('js-is-hidden');
   currentSearch.page = 1;
+  currentSearch.nowDisplayed = 0;
 
   currentSearch.phrase = event.currentTarget.searchQuery.value.trim();
-  console.log(currentSearch.phrase);
+  //console.log('in button search handler  ' + currentSearch.phrase);
 
   if (currentSearch.phrase === '') {
     return warningEmptySearch();
   }
 
-  refs.btnLoadMore.classList.remove('js-is-hidden');
+  //refs.btnLoadMore.classList.remove('js-is-hidden');
   getImgWithOutGalleryCreation(
     currentSearch.phrase,
     currentSearch.page,
@@ -86,6 +75,11 @@ function clickOnBtnSearchHandler(event) {
   )
     .then(data => {
       createGallery(data, refs.gallery);
+      if(currentSearch.totalHits>currentSearch.nowDisplayed){
+        //console.log('totalHits: '+ currentSearch.totalHits + ' now displayed: '+ currentSearch.nowDisplayed);
+        refs.btnLoadMore.classList.remove('js-is-hidden');
+      }
+      simplelightbox.refresh();
     })
     .then(() => {
       if (currentSearch.totalHits === 0) {
@@ -98,15 +92,19 @@ function clickOnBtnSearchHandler(event) {
 
 /*defining clickOnBtnLoadMoreHandler function*/
 function clickOnBtnLoadMoreHandler(event) {
-  if (currentSearch.totalHits > currentSearch.page * 40) {
+  if (currentSearch.totalHits > currentSearch.nowDisplayed) {
     currentSearch.page += 1;
-    console.log(currentSearch.phrase);
+    //console.log('in button load more handler  ' + currentSearch.phrase);
     getImgWithOutGalleryCreation(
       currentSearch.phrase,
       currentSearch.page,
       currentSearch.resultsPerPage
     ).then(data => {
       createGallery(data, refs.gallery);
+      if(currentSearch.totalHits<currentSearch.nowDisplayed){
+        //console.log('totalHits: '+ currentSearch.totalHits + ' now displayed: '+ currentSearch.nowDisplayed);
+        refs.btnLoadMore.classList.add('js-is-hidden');
+      }
       simplelightbox.refresh();
     })
     .catch(error => console.log(error));
